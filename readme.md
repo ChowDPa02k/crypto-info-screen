@@ -4,9 +4,9 @@ Now, you don't have to take your phone, open a cryptocurrency market app and wai
 
 ![preview](images/preview.jpg)
 
-This porject fetch data from both Huobi (using WebSocket) and Binance (using HTTP request), and update to HMI real-time.
+This project fetch data from both Huobi (using WebSocket) and Binance (using HTTP request), and update to HMI real-time.
 
-Note: both of those market blocked request from Mainland China IP
+Note: both of those market blocked requests from Mainland China IP
 
 ---
 
