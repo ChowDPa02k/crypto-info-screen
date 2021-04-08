@@ -88,7 +88,6 @@ def get_price_change():
         sleep(0.5)
 
 def on_message(wsapp, message):
-    # global device
     result = gzip.decompress(message)
     result = json.loads(result)
 
@@ -104,9 +103,9 @@ def on_message(wsapp, message):
         if result['ch'] == 'market.btcusdt.detail':
             currency = 'BTC'
             change = price_change['BTCUSDT']
-        if print_only:
+        if verbose or print_only:
             print(currency, result['tick']['close'], float(change), result['tick']['high'], result['tick']['low'])
-        else:
+        if not print_only:
             command = serial_command_generator({
                 'currency': currency,
                 'price': result['tick']['close'],
@@ -136,13 +135,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--serial", dest="serial", help="serial port location, default is /dev/ttyAMA0")
     parser.add_argument("-l", "--list-only", dest="po", help="only print information rather than sending to serial port", action="store_true")
+    parser.add_argument("-v", "--verbose", dest="verbose", help="print data from websocket", action="store_true")
     parser.add_argument("--serial-debug", dest="sd", help="show commands that sent to serial port", action="store_true")
     args = parser.parse_args()
     
     print_only = True if args.po else False
     serial_debug = True if args.sd else False
+    verbose = True if args.verbose else False
     serial_port = args.serial if not (args.serial == None) else '/dev/ttyAMA0'
-    if (print_only and serial_debug):
+    if (print_only and (serial_debug or not(args.serial == None))):
         raise ValueError('list_only conflicts with serial port arguments')
 
     # open serial port
@@ -156,7 +157,7 @@ if __name__ == "__main__":
     for item in price_change:
         print(item, price_change[item])
 
-    # create a schedular to get increases
+    # create a schedular to get price change percent
     print('Creating price change update schedular')
     schedular = background.BackgroundScheduler()
     schedular.add_job(get_price_change, 'interval', seconds=1, id='refresh')

@@ -17,7 +17,7 @@ Note: both of those market blocked requests from Mainland China IP
 
 ## Installation
 
-For Respberry Pi 3 Series, you need to enable GPIO serial Port to make it works. Otherwise, a CH340 USBTTL also works at any platform, just simply modify serial port name using -s argument.
+For Respberry Pi 3 Series, you need to enable GPIO serial Port to make it works. Otherwise, a CH340 USBTTL also works at any platform, just simply modify serial port name using ```-s``` argument.
 
 ```
 pip3 install -r requirements.txt
@@ -29,13 +29,14 @@ Reference: https://blog.csdn.net/m0_37509650/article/details/85403217
 ## Usage
 
 ```
-usage: main.py [-h] [-s SERIAL] [-l] [--serial-debug]
+usage: main.py [-h] [-s SERIAL] [-l] [-v] [--serial-debug]
 
 optional arguments:
   -h, --help            show this help message and exit
   -s SERIAL, --serial SERIAL
                         serial port location, default is /dev/ttyAMA0
   -l, --list-only       only print information rather than sending to serial port
+  -v, --verbose         print data from websocket
   --serial-debug        show commands that sent to serial port
 ```
 
