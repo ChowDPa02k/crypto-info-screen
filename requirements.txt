@@ -1,0 +1,4 @@
+APScheduler
+pyserial
+requests
+websocket-client
