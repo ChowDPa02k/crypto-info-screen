@@ -12,14 +12,14 @@ import argparse
 coins = ['ETHUSDT', 'BTCUSDT']
 price_change= {}
 
-# SERIAL_BLOCKED = False
+SERIAL_BLOCKED = False
 COLOR_UP_GREEN = '7596'
 COLOR_DOWN_RED = '64106'
 # init object parameters in HMI
 # use array is not a good way, but who cares?
 controls = {
     # coin name, change mark, price change percent, 24h highest, 24h lowest, price integer, price dot
-    'ETH': ['page0.cn0', 'page0.m0', 'page0.c0', 'page0.h0', 'page0.l0', 'page0.p0', 'page0.p0d'],
+    'ETH': ['page0.cn0', 'page0.m0', 'page0.pc0', 'page0.h0', 'page0.l0', 'page0.p0', 'page0.p0d'],
     'BTC': ['page0.cn1', 'page0.m1', 'page0.pc1', 'page0.h1', 'page0.l1', 'page0.p1', 'page0.p1d']
 }
 pool_controls = {
@@ -119,6 +119,7 @@ def get_price_change():
         # if item == 'BTCUSDT':
         #     btc_price_change = result['priceChangePercent']
         sleep(0.5)
+    # print('💹 Price change updated')
 
 def get_pool_status(miner):
     worker = 'https://www.sparkpool.com/v1/miner/stats'
@@ -161,7 +162,7 @@ def get_pool_status(miner):
     }
 
 def update_pool_status():
-    global pool
+    global pool, SERIAL_BLOCKED
     pool_status = get_pool_status(pool)
     if verbose:
         print(pool_status)
@@ -169,15 +170,18 @@ def update_pool_status():
     if serial_debug:
         print(commands)
     if not print_only:
+        SERIAL_BLOCKED = True
+        sleep(0.2)
         send_serial(device, commands)
-    print('Sparkpool status', pool, 'updated')
+        SERIAL_BLOCKED = False
+    print('🔥 Sparkpool status', pool, 'updated')
 
 def on_message(wsapp, message):
     result = gzip.decompress(message)
     result = json.loads(result)
 
     if 'ping' in result:
-        print('Got ping')
+        print('❤ Got ping')
         wsapp.send(
             json.dumps({"pong": result['ping']})
         )
@@ -199,7 +203,10 @@ def on_message(wsapp, message):
                 'high': result['tick']['high'],
                 'low': result['tick']['low']
             })
-            send_serial(device, command)
+            if not SERIAL_BLOCKED:
+                send_serial(device, command)
+            else:
+                print('⏭ Skipped update price information due to blocked serial port')
 
 def on_open(wsapp):
     req_eth = '{"sub": "market.ethusdt.detail", "id": "1110"}'
@@ -236,7 +243,7 @@ if __name__ == "__main__":
     # open serial port
     if not print_only:
         device = serial.Serial(serial_port, 115200, timeout=1)
-        print('Successfully open serial port', device.name)
+        print('🔌Successfully open serial port', device.name)
 
     # init increses variable
     get_price_change()
@@ -245,18 +252,18 @@ if __name__ == "__main__":
         print(item, price_change[item])
 
     # create a schedular to get price change percent
-    print('Creating price change update schedular')
+    print('💹 Creating price change update schedular')
     schedular = background.BackgroundScheduler()
-    schedular.add_job(get_price_change, 'interval', seconds=1, id='refresh')
+    schedular.add_job(get_price_change, 'interval', seconds=2, id='refresh')
 
     # create another schedular to update mining pool status
     if pool:
-        print('Creating sparkpool update schedular')
-        schedular.add_job(update_pool_status, 'interval', minutes=2, id='refresh_pool')
+        print('⭐ Creating sparkpool update schedular')
+        schedular.add_job(update_pool_status, 'interval', minutes=1, id='refresh_pool')
     schedular.start()
 
     # establish websocket connection
-    print('Establishing websocket connection\n')
+    print('⛓ Establishing websocket connection\n')
     websocket.enableTrace(False)
     wsapp = websocket.WebSocketApp("wss://api.huobi.pro/ws", on_message=on_message, on_open=on_open)
     signal.signal(signal.SIGINT, sigint_handler)
