@@ -12,14 +12,31 @@ import argparse
 coins = ['ETHUSDT', 'BTCUSDT']
 price_change= {}
 
+# SERIAL_BLOCKED = False
 COLOR_UP_GREEN = '7596'
 COLOR_DOWN_RED = '64106'
 # init object parameters in HMI
 # use array is not a good way, but who cares?
 controls = {
     # coin name, change mark, price change percent, 24h highest, 24h lowest, price integer, price dot
-    'ETH': ['cn0', 'm0', 'pc0', 'h0', 'l0', 'p0', 'p0d'],
-    'BTC': ['cn1', 'm1', 'pc1', 'h1', 'l1', 'p1', 'p1d']
+    'ETH': ['page0.cn0', 'page0.m0', 'page0.c0', 'page0.h0', 'page0.l0', 'page0.p0', 'page0.p0d'],
+    'BTC': ['page0.cn1', 'page0.m1', 'page0.pc1', 'page0.h1', 'page0.l1', 'page0.p1', 'page0.p1d']
+}
+pool_controls = {
+        'pool_name' : 'page1.pn',
+        'balance' : 'page1.vb',
+        'daily_income': 'page1.vd',
+        'monthly_income': 'page1.vm',
+        'realtime_hashrate': 'page1.rh',
+        'average_hashrate': 'page1.ah',
+        'local_hashrate': 'page1.lh',
+        'average_local_hashrate': 'page1.la',
+        'online': 'page1.onc',
+        'offline': 'page1.ofc',
+        'balance_cny': 'page1.vbc',
+        'daily_cny': 'page1.vdc',
+        'monthly_cny': 'page1.vmc',
+        'scale': 'page1.scale'
 }
 
 def serial_command_generator(content):
@@ -69,6 +86,22 @@ def serial_command_generator(content):
         print(commands)
     return commands
 
+def serial_pool_command_generator(content):
+    global pool_controls
+    commands = []
+    commands.append(pool_controls['pool_name'] + '.txt="%s"' % content['pool_name'])
+    for key in ['balance', 'daily_income', 'monthly_income']:
+        commands.append(pool_controls[key] + '.txt="%.6f"' % float(content[key]))
+    for key in ['balance_cny', 'daily_cny', 'monthly_cny']:
+        commands.append(pool_controls[key] + '.txt="%.2f CNY"' % float(content[key]))
+    for key in ['realtime_hashrate', 'average_hashrate', 'local_hashrate', 'average_local_hashrate']:
+        commands.append(pool_controls[key] + '.txt="%.2fM"' % float(float(content[key])/1000000.0))
+    for key in ['online', 'offline']:
+        commands.append(pool_controls[key] + '.txt="%.0f"' % content[key])
+    scale = content['online'] / (content['online'] + content['offline'])
+    commands.append(pool_controls['scale'] + '.val=%i' % int(scale*100))
+    return commands
+
 def send_serial(device, commands):
     for item in commands:
         cmd = binascii.hexlify(item.encode('utf-8')).decode('utf-8')
@@ -86,6 +119,58 @@ def get_price_change():
         # if item == 'BTCUSDT':
         #     btc_price_change = result['priceChangePercent']
         sleep(0.5)
+
+def get_pool_status(miner):
+    worker = 'https://www.sparkpool.com/v1/miner/stats'
+    bill = 'https://www.sparkpool.com/v1/bill/stats'
+    exchange = 'https://api.coinbase.com/v2/exchange-rates?currency=ETH'
+
+    r_worker = requests.get(worker, params={
+        'currency': 'ETH',
+        'miner': miner
+    })
+    r_bill = requests.get(bill, params={
+        'currency': 'ETH',
+        'miner': miner
+    })
+    r_exchange = requests.get(exchange)
+
+    worker_status = r_worker.json()
+    bill_status = r_bill.json()
+    exchange_value = r_exchange.json()
+    exchange_value = float(exchange_value['data']['rates']['CNY'])
+
+    balance_exchanged = exchange_value * float(bill_status['data']['balance'])
+    daily_exchanged = exchange_value * float(bill_status['data']['pay1day'])
+    monthly_exchanged = exchange_value * float(bill_status['data']['paid30days'])
+
+    return {
+        'pool_name' : miner,
+        'balance' : bill_status['data']['balance'],
+        'daily_income': bill_status['data']['pay1day'],
+        'monthly_income': bill_status['data']['paid30days'],
+        'realtime_hashrate': worker_status['data']['hashrate'],
+        'average_hashrate': worker_status['data']['meanHashrate24h'],
+        'local_hashrate': worker_status['data']['localHashrate'],
+        'average_local_hashrate': worker_status['data']['meanLocalHashrate24h'],
+        'online': float(worker_status['data']['onlineWorkerCount']),
+        'offline': float(worker_status['data']['offlineWorkerCount']),
+        'balance_cny': balance_exchanged,
+        'daily_cny': daily_exchanged,
+        'monthly_cny': monthly_exchanged
+    }
+
+def update_pool_status():
+    global pool
+    pool_status = get_pool_status(pool)
+    if verbose:
+        print(pool_status)
+    commands = serial_pool_command_generator(pool_status)
+    if serial_debug:
+        print(commands)
+    if not print_only:
+        send_serial(device, commands)
+    print('Sparkpool status', pool, 'updated')
 
 def on_message(wsapp, message):
     result = gzip.decompress(message)
@@ -134,14 +219,16 @@ if __name__ == "__main__":
     # argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--serial", dest="serial", help="serial port location, default is /dev/ttyAMA0")
+    parser.add_argument("-p", "--pool", dest="pool", help="update miner account information in sparkpool if given")
     parser.add_argument("-l", "--list-only", dest="po", help="only print information rather than sending to serial port", action="store_true")
-    parser.add_argument("-v", "--verbose", dest="verbose", help="print data from websocket", action="store_true")
+    parser.add_argument("-v", "--verbose", dest="verbose", help="print data from network", action="store_true")
     parser.add_argument("--serial-debug", dest="sd", help="show commands that sent to serial port", action="store_true")
     args = parser.parse_args()
     
     print_only = True if args.po else False
     serial_debug = True if args.sd else False
     verbose = True if args.verbose else False
+    pool = args.pool if not (args.pool == None) else False
     serial_port = args.serial if not (args.serial == None) else '/dev/ttyAMA0'
     if (print_only and (serial_debug or not(args.serial == None))):
         raise ValueError('list_only conflicts with serial port arguments')
@@ -161,6 +248,11 @@ if __name__ == "__main__":
     print('Creating price change update schedular')
     schedular = background.BackgroundScheduler()
     schedular.add_job(get_price_change, 'interval', seconds=1, id='refresh')
+
+    # create another schedular to update mining pool status
+    if pool:
+        print('Creating sparkpool update schedular')
+        schedular.add_job(update_pool_status, 'interval', minutes=2, id='refresh_pool')
     schedular.start()
 
     # establish websocket connection
