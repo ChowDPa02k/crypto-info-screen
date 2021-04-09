@@ -48,6 +48,12 @@ python .\main.py -l
 ```
 ![example](images/example.png)
 
+In Windows:
+```
+python .\main.py -s COM3 -p sp_*****
+```
+![example1](images/example1.png)
+
 ## UI
 
 You can change screen UI by modifying ```screen.HMI``` using USART HMI
