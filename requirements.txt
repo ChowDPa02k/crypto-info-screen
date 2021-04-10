@@ -2,3 +2,5 @@ APScheduler
 pyserial
 requests
 websocket-client
+numpy
+scipy

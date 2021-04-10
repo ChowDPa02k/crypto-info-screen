@@ -54,6 +54,16 @@ python .\main.py -s COM3 -p sp_*****
 ```
 ![example1](images/example1.png)
 
+## Don't stop
+
+I recommend run script as daemon using pm2:
+```
+pm2 startup
+pm2 main.py --interpreter=python3 -- <args>
+pm2 save
+```
+**--interpreter=python3** MUST REQUIRED
+
 ## UI
 
 You can change screen UI by modifying ```screen.HMI``` using USART HMI
@@ -66,8 +76,17 @@ Reference: http://wiki.tjc1688.com/doku.php?id=start
 
 ## Changelog
 
+ - V4.0
+   - Added Page 3: Now you can even monitor ETH Network Hashrate & Price changes
+   - Curve data comes from Sparkpool API, scaled in month, and updates every 24 hours
+   - Data got normalized before sent to HMI screen
+     ![v4](images/v4.jpg)
+   - Initialization logic got optimized
+   - Serial Block got optimized
+   - Current project works, but it might works better with a queue system managing serial commands in case some data get dropped while serial blocked.
+
  - V3.0
-   - Now support display mining information from Sparkpool, using ```-p POOL``` argument to specify a mining sub-account
+   - Added page 2: Now support display mining information from Sparkpool, using ```-p POOL``` argument to specify a mining sub-account
      ![screenshot](images/preview1.jpg)
    - Touch anywhere of screen to switch between market page and mining page
    - Currently I set a 2 minute interval for pool state update. You might need to change source script in ```main.py``` to adjust interval at line 255

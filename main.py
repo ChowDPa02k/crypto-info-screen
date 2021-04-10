@@ -8,6 +8,9 @@ import signal,os,logging
 import binascii
 import serial
 import argparse
+from scipy.interpolate import interp1d
+import datetime
+import numpy as np
 
 coins = ['ETHUSDT', 'BTCUSDT']
 price_change= {}
@@ -102,6 +105,17 @@ def serial_pool_command_generator(content):
     commands.append(pool_controls['scale'] + '.val=%i' % int(scale*100))
     return commands
 
+def serial_chart_command_generator(content):
+    commands = ['page 2', 'cle 3,0', 'cle 3,1']
+    for item in content['hashrate']:
+        commands.append('add 3,0,%i' % item)
+    for item in content['price']:
+        commands.append('add 3,1,%i' % item)
+    for item in range(4,8):
+        commands.append('ref %i' % item)
+    commands.append('page 0')
+    return commands
+
 def send_serial(device, commands):
     for item in commands:
         cmd = binascii.hexlify(item.encode('utf-8')).decode('utf-8')
@@ -170,11 +184,61 @@ def update_pool_status():
     if serial_debug:
         print(commands)
     if not print_only:
-        SERIAL_BLOCKED = True
-        sleep(0.2)
-        send_serial(device, commands)
-        SERIAL_BLOCKED = False
+        while True:
+            if not SERIAL_BLOCKED:
+                SERIAL_BLOCKED = True
+                sleep(0.2)
+                send_serial(device, commands)
+                SERIAL_BLOCKED = False
+                break
+            print('Sparkpool status: Waiting for serial port released')
+            sleep(1)
     print('🔥 Sparkpool status', pool, 'updated')
+
+def update_network_status():
+    global SERIAL_BLOCKED
+
+    def norm(array):
+        return (224 * (array - np.min(array)) / np.ptp(array)).astype(int)
+
+    url = 'https://www.sparkpool.com/v1/currency/statsHistory'
+    r = requests.get(url, params={
+        'currency': 'ETH',
+        'zoom': 'm'
+    })
+    data = r.json()['data']
+
+    hashrate = []
+    usd = []
+
+    for item in data:
+    # time.append(dateutil.parser.isoparse(item['time']))
+        hashrate.append(float(item['hashrate'])/1000000000000)
+        usd.append(item['usd'])
+    x = np.linspace(0,120,120)
+    x_scaled = np.linspace(0, 120, 448)
+
+    interpreted_hashrate = interp1d(x, hashrate, kind='cubic')
+    interpreted_price = interp1d(x, usd, kind='cubic')
+    commands = serial_chart_command_generator({
+        'hashrate': norm(interpreted_hashrate(x_scaled)),
+        'price': norm(interpreted_price(x_scaled))
+    })
+    if verbose:
+        print(data)
+    if serial_debug:
+        print(commands)
+    if not print_only:
+        while True:
+            if not SERIAL_BLOCKED:
+                SERIAL_BLOCKED = True
+                sleep(0.2)
+                send_serial(device, commands)
+                SERIAL_BLOCKED = False
+                break
+            print('Global ETH mining status: Waiting for serial port released')
+            sleep(1)
+    print('🌐 Global ETH mining status updated')
 
 def on_message(wsapp, message):
     result = gzip.decompress(message)
@@ -246,21 +310,28 @@ if __name__ == "__main__":
         print('🔌Successfully open serial port', device.name)
 
     # init increses variable
-    get_price_change()
-    print('Initialized cryptocurrency price changes:')
-    for item in price_change:
-        print(item, price_change[item])
+    # get_price_change()
+    # print('Initialized cryptocurrency price changes:')
+    # for item in price_change:
+    #     print(item, price_change[item])
 
     # create a schedular to get price change percent
     print('💹 Creating price change update schedular')
     schedular = background.BackgroundScheduler()
-    schedular.add_job(get_price_change, 'interval', seconds=2, id='refresh')
+    schedular.add_job(get_price_change, 'interval', seconds=2, id='refresh_price_change')
+
+    print('🌐 Creating global ETH mining status update schedular')
+    schedular.add_job(update_network_status, 'interval', hours=24, id='refresh_eth')
 
     # create another schedular to update mining pool status
     if pool:
         print('⭐ Creating sparkpool update schedular')
-        schedular.add_job(update_pool_status, 'interval', minutes=1, id='refresh_pool')
+        schedular.add_job(update_pool_status, 'interval', minutes=1, id='refresh_sparkpool')
     schedular.start()
+
+    for job in schedular.get_jobs():
+        print('Trigerring job', job.id, 'init run')
+        job.modify(next_run_time=datetime.datetime.now())
 
     # establish websocket connection
     print('⛓ Establishing websocket connection\n')
