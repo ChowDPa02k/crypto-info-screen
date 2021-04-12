@@ -326,7 +326,7 @@ if __name__ == "__main__":
     # create another schedular to update mining pool status
     if pool:
         print('⭐ Creating sparkpool update schedular')
-        schedular.add_job(update_pool_status, 'interval', minutes=1, id='refresh_sparkpool')
+        schedular.add_job(update_pool_status, 'interval', minutes=2, id='refresh_sparkpool')
     schedular.start()
 
     for job in schedular.get_jobs():
